@@ -70,24 +70,23 @@ idf.py -p /dev/cu.usbmodem14101 flash monitor
 1. 烧完 ESP32 保持接着 USB（当 serial log 用）
 2. 把 **C1 Slim** 从设置里连 WiFi：
    - SSID: `C1SLIM-LAB`
-   - 密码: `c1slimlab2026`
+   - 密码: `12345678`
 3. 设备上**关于本机** → 连点系统版本进入隐藏调试菜单 → 打开 ADB
 4. 盯 ESP32 的 serial log：
    ```
    GET api.mpen.com.cn/v1/pens/XXXX?action=adbAdmit  host=api.mpen.com.cn  <-- adbAdmit HIT
    ```
 5. macOS 上 `adb devices` 应该看到设备；`adb shell` 就是 root
-6. **立刻** 把永久化植入推上去（照搬 `../C1Max-Capture/root-implant/`）：
+6. **立刻** 把永久化植入打上去（Slim 版，已真机验证）：
    ```bash
-   adb shell 'mount -o remount,rw /'
-   adb push usbconfig.sh.rooted /usr/bin/usbconfig.sh
-   adb shell 'chmod 755 /usr/bin/usbconfig.sh'
-   # /etc/build.prop 的 user.usb.config=mtp 改 adb（双保险）
-   adb shell 'mkdir -p /storage/rootbak && cp /usr/bin/usbconfig.sh.orig /storage/rootbak/'
-   adb shell sync
+   adb push root-implant/apply.sh /tmp/
+   adb shell 'sh /tmp/apply.sh'
+   adb reboot && sleep 20 && adb devices    # 应直接看到 root 设备
    ```
-   > C1 Slim 的 usbconfig.sh 布局可能和 Max 不完全一样 —— 第一次拿到 shell 先 `cat` 看看，
-   > 必要时抄 Max 的 `adb+mtp 复合 gadget` 思路改一份出来。
+   详见 [`root-implant/README.md`](root-implant/README.md)。核心是 patch
+   `/etc/init.d/S90usb` 第 34 行，把 `#/etc/init.d/usb/adb $1` 的注释去掉，
+   备份进 `/storage/rootbak/`。Slim 系统是 Buildroot + busybox sysv，和 Max
+   的 Android init / usbconfig.sh 走的是**完全不同**的路径。
 
 植入完以后 ESP32 不再是必需品；设备重启后 adbd 永远在。
 
@@ -119,4 +118,6 @@ idf.py -p /dev/cu.usbmodem14101 flash monitor
 | MITM 位置 | Ubuntu VM + USB WiFi 网卡 + mitmproxy | 一块 ESP32-S3 板子 |
 | HTTPS 解密 | mitmproxy 自签 CA | 自签 cert（设备不校验） |
 | 响应改写 | `mitm_addon.py` 的 Python 对象改 | C 字符串直出 |
-| 后置永久化 | 一样：`usbconfig.sh.rooted` + build.prop |
+| init 系统 | Android init + property + usbconfig.sh | Buildroot busybox sysv + `/etc/init.d/S90usb` |
+| 永久化点 | 改 `usbconfig.sh`（mtp 分支也挂 adb） | 改 `S90usb` 取消 adb 行注释 |
+| 备份位置 | `/storage/rootbak/` | `/storage/rootbak/` (`mmcblk0p8`) |
